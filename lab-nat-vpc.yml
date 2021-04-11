@@ -1,0 +1,420 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Builds a VPC for a lab environment
+
+Parameters:
+  VPCCIDR:
+     Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+     Type: String
+     Default: 10.0.0.0/16
+
+  EnvironmentName:
+     Type: String
+     Default: lab
+
+  ExternalSubnet1CIDR:
+     Description: Please enter the IP range (CIDR notation) for the External subnet.
+     Type: String
+     Default: 10.0.200.0/24
+  ExternalSubnet2CIDR:
+     Description: Please enter the IP range (CIDR notation) for the External subnet.
+     Type: String
+     Default: 10.0.201.0/24
+  ExternalSubnet3CIDR:
+     Description: Please enter the IP range (CIDR notation) for the External subnet.
+     Type: String
+     Default: 10.0.202.0/24
+
+  PublicSubnet1CIDR:
+     Description: Please enter the IP range (CIDR notation) for the public subnet.
+     Type: String
+     Default: 10.0.230.0/24
+  PublicSubnet2CIDR:
+     Description: Please enter the IP range (CIDR notation) for the public subnet.
+     Type: String
+     Default: 10.0.231.0/24
+  PublicSubnet3CIDR:
+     Description: Please enter the IP range (CIDR notation) for the public subnet.
+     Type: String
+     Default: 10.0.232.0/24
+
+  AppSubnet1CIDR:
+     Description: Please enter the IP range (CIDR notation) for the App subnet.
+     Type: String
+     Default: 10.0.100.0/24
+  AppSubnet2CIDR:
+     Description: Please enter the IP range (CIDR notation) for the App subnet.
+     Type: String
+     Default: 10.0.101.0/24
+  AppSubnet3CIDR:
+     Description: Please enter the IP range (CIDR notation) for the App subnet.
+     Type: String
+     Default: 10.0.102.0/24
+
+  DataSubnet1CIDR:
+     Description: Please enter the IP range (CIDR notation) for the Data subnet.
+     Type: String
+     Default: 10.0.0.0/24
+  DataSubnet2CIDR:
+     Description: Please enter the IP range (CIDR notation) for the Data subnet.
+     Type: String
+     Default: 10.0.1.0/24
+  DataSubnet3CIDR:
+     Description: Please enter the IP range (CIDR notation) for the Data subnet.
+     Type: String
+     Default: 10.0.2.0/24
+
+########################################################
+# VPC & Subnets
+########################################################
+Resources:
+  VPC: 
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags: 
+        - Key: Name 
+          Value: lab-nat-vpc
+
+  ExternalSubnet1: 
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [0, !GetAZs '' ]
+          CidrBlock: !Ref ExternalSubnet1CIDR
+          Tags:
+              - Key: Name 
+                Value: !Sub Subnet-External1-${EnvironmentName}
+  ExternalSubnet2: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [1, !GetAZs '' ]
+        CidrBlock: !Ref ExternalSubnet2CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-External2-${EnvironmentName}
+  ExternalSubnet3: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [2, !GetAZs '' ]
+        CidrBlock: !Ref ExternalSubnet3CIDR
+        MapPublicIpOnLaunch: True
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-External3-${EnvironmentName}
+
+  PublicSubnet1: 
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [0, !GetAZs '' ]
+          CidrBlock: !Ref PublicSubnet1CIDR
+          MapPublicIpOnLaunch: True
+          Tags:
+              - Key: Name 
+                Value: !Sub Subnet-Public1-${EnvironmentName}
+  PublicSubnet2: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [1, !GetAZs '' ]
+        CidrBlock: !Ref PublicSubnet2CIDR
+        MapPublicIpOnLaunch: True
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-Public2-${EnvironmentName}
+  PublicSubnet3: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [2, !GetAZs '' ]
+        MapPublicIpOnLaunch: True
+        CidrBlock: !Ref PublicSubnet3CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-Public3-${EnvironmentName}
+
+  AppSubnet1: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [0, !GetAZs '' ]
+        CidrBlock: !Ref AppSubnet1CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-App1-${EnvironmentName}
+  AppSubnet2: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [1, !GetAZs '' ]
+        CidrBlock: !Ref AppSubnet2CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-App2-${EnvironmentName}
+  AppSubnet3: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [2, !GetAZs '' ]
+        CidrBlock: !Ref AppSubnet3CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-App3-${EnvironmentName}
+
+  DataSubnet1: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [0, !GetAZs '' ]
+        CidrBlock: !Ref DataSubnet1CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-Data1-${EnvironmentName}
+  DataSubnet2: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [1, !GetAZs '' ]
+        CidrBlock: !Ref DataSubnet2CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-Data2-${EnvironmentName}
+  DataSubnet3: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [2, !GetAZs '' ]
+        CidrBlock: !Ref DataSubnet3CIDR
+        Tags:
+            - Key: Name 
+              Value: !Sub Subnet-Data3-${EnvironmentName}
+
+########################################################
+# Security Groups & Security Group Rules
+########################################################
+
+  SecurityGroupNATInstances:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupName: SecurityGroupNatInstances
+      GroupDescription: Security Group for NAT Instances
+      Tags:
+        - Key: Name
+          Value: !Sub 'SecurityGroup-NatInstance-${EnvironmentName}'
+  SecurityGroupIngressNAT443:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow HTTPS traffic from VPC
+      IpProtocol: tcp
+      GroupId: !Ref SecurityGroupNATInstances
+      CidrIp: !Ref VPCCIDR
+      FromPort: 443
+      ToPort: 443
+  SecurityGroupEgressNAT443:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow HTTPS traffic to internet.
+      GroupId: !Ref SecurityGroupNATInstances
+      IpProtocol: tcp
+      CidrIp: 0.0.0.0/0
+      FromPort: 443
+      ToPort: 443
+
+########################################################
+# Internet Gateways & NAT
+########################################################
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+          - Key: Name
+            Value: !Sub InternetGateway-${EnvironmentName}
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+####################################
+# External Routes
+#################################### 
+  ExternalRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub 'ExternalRouteTable-${EnvironmentName}'
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: ExternalRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  SRTAExernal1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref ExternalRouteTable
+      SubnetId: !Ref ExternalSubnet1
+  SRTAExternal2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref ExternalRouteTable
+      SubnetId: !Ref ExternalSubnet2
+  SRTAExternal3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref ExternalRouteTable
+      SubnetId: !Ref ExternalSubnet3
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub 'PublicRouteTable-${EnvironmentName}'
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+
+  SRTAPublic1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+  SRTAPublic2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+  SRTAPublic3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+
+########################################################
+# App Subnet Routes to NAT
+########################################################
+  AppRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub 'AppRouteTable-${EnvironmentName}'
+      - Key: AllowNatRouteUpdates
+        Value: Not Applicable
+  SRTAApp1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AppRouteTable
+      SubnetId: !Ref AppSubnet1
+  SRTAApp2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AppRouteTable
+      SubnetId: !Ref AppSubnet2
+  SRTAApp3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AppRouteTable
+      SubnetId: !Ref AppSubnet3
+
+########################################################
+# Data Subnet Routes to NAT
+########################################################
+  DataRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub 'DataRouteTable-${EnvironmentName}'
+      - Key: AllowNatRouteUpdates
+        Value: Not Applicable
+  SRTAData1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DataRouteTable
+      SubnetId: !Ref DataSubnet1
+  SRTAData2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DataRouteTable
+      SubnetId: !Ref DataSubnet2
+  SRTAData3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DataRouteTable
+      SubnetId: !Ref DataSubnet3
+
+########################################################
+# App Security Group
+########################################################
+  SecurityGroupApp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupName: SecurityGroupApp
+      GroupDescription: Security Group for App Instances
+      Tags:
+        - Key: Name
+          Value: !Sub 'SecurityGroup-App-${EnvironmentName}'
+
+  SecurityGroupAppAllInternal:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      Description: Allow all traffic internally
+      GroupId: !Ref SecurityGroupApp
+      SourceSecurityGroupId: !Ref SecurityGroupApp
+      FromPort: 0
+      ToPort: 65534
+
+
+
+########################################################
+# Outputs - reduced for simplicity
+########################################################
+Outputs:
+  LabVPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+
+  ExternalSubnet1:
+    Description: A reference to ExternalSubnet1
+    Value: !Ref ExternalSubnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-ExternalSubnet1"
+  ExternalSubnet2:
+    Description: A reference to ExternalSubnet2
+    Value: !Ref ExternalSubnet2
+    Export:
+      Name: !Sub "${AWS::StackName}-ExternalSubnet2"
+  ExternalSubnet3:
+    Description: A reference to ExternalSubnet3
+    Value: !Ref ExternalSubnet3
+    Export:
+      Name: !Sub "${AWS::StackName}-ExternalSubnet3"
+
+  SecurityGroupNATInstances:
+    Description: A reference to the NAT Instances security group
+    Value: !Ref SecurityGroupNATInstances
+    Export:
+      Name: !Sub "${AWS::StackName}-SecurityGroupNATInstances"

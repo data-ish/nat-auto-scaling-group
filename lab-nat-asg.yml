@@ -1,0 +1,268 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploys a NAT Instance ASG and utility Lambda Functions.
+Parameters:
+  VpcStackName:
+    Description: Please enter the name of the cloudformation stack containing the VPC.
+    Type: String
+    Default: lab-nat-vpc
+  NatInstanceAmi:
+    Description: Please enter the ID of the Amazon Machine Image to use for this Nat Instance, these are region specific.
+    Type: String
+    Default: ami-02e62b1808a107d41
+  KeyName:
+    Description: Please enter the name of the EC2 KeyPair to use when creating the EC2 instance.
+    Type: String
+    Default: lab-nat-asg
+
+Resources:
+########################################################################
+# NAT Gateway ASG
+########################################################################
+  NatLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: t3.nano
+        KeyName: !Ref KeyName
+        ImageId: !Ref NatInstanceAmi
+        InstanceMarketOptions:
+          MarketType: spot
+          SpotOptions:
+            SpotInstanceType: one-time
+            MaxPrice: 0.0059
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${VpcStackName}-SecurityGroupNATInstances"
+        CreditSpecification:
+          CpuCredits: standard
+
+  NatAutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NatLaunchTemplate
+        Version: !GetAtt NatLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${VpcStackName}-ExternalSubnet1"
+        - Fn::ImportValue: !Sub "${VpcStackName}-ExternalSubnet2"
+        - Fn::ImportValue: !Sub "${VpcStackName}-ExternalSubnet3"
+      DesiredCapacity: 1
+      MaxSize: 1
+      MinSize: 1
+      Tags:
+        - Key: Name
+          Value: 'lab-nat-asg-nat-instance'
+          PropagateAtLaunch: True
+
+#######################################################################
+# Events & Triggers
+#######################################################################
+  ConfigureNatInstancesEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: On an EC2 Event change detect if it's a NAT instance & update routing etc accordingly.
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - 'EC2 Instance State-change Notification'
+      Targets:
+        -
+          Arn: !GetAtt [ConfigureNatInstances, Arn]
+          Id: 1
+
+  TurnOffAt0100:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Turn Resources off at 0100 each night
+      ScheduleExpression: cron(0 1 * * ? *)
+      Targets:
+        -
+          Arn: !GetAtt [SetAsgCapacity, Arn]
+          Id: 1
+          Input: "{\"size\" : 0}"
+
+########################################################################
+# IAM
+########################################################################
+  LambdaUtilityRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+      Policies:
+        - PolicyName: UtilityRoleInlinePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:*
+                Resource: '*'
+
+########################################################################
+# Functions
+########################################################################
+  ConfigureNatInstances:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaUtilityRole.Arn
+      Code: 
+        ZipFile: |
+            import json
+            import boto3
+            
+            def lambda_handler(event, context):
+                instance_id = event["detail"]["instance-id"]
+                state = event["detail"]["state"]
+                
+                if(isNatInstance(instance_id) and state in ["running"]):
+                    disableSourceDestCheck(instance_id)
+                    updateRouteTables(instance_id)
+                    msg = {'statusCode' : 200, 'body' : 'NAT configuration updated'}
+                else:
+                    msg = {'statusCode' : 204, 'body' : 'Instance not a NAT instance, or state not in [running, pending] :  Skipping'}
+                
+                return msg
+
+
+            # For a single instance search the tags and see if this instance is part of a NAT(Network Address Translation) auto scaling  group.
+            def isNatInstance(instance_id):
+                is_nat_instance = False
+                ec2 = boto3.client('ec2')
+                tags = ec2.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]["Tags"]
+                for tag in tags:
+                    if tag["Key"] == "Name" and 'lab-nat-asg-nat-instance' in tag["Value"]:
+                        is_nat_instance = True
+                return is_nat_instance
+
+
+            def disableSourceDestCheck(instance_id):
+                ec2 = boto3.client('ec2')
+                return ec2.modify_instance_attribute(InstanceId = instance_id, SourceDestCheck={"Value" : False})
+
+
+            def updateRouteTables(instance_id):
+                ec2 = boto3.client('ec2')
+                
+                # Get the VPC that the Instance belongs to.
+                vpc_id = ec2.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]["VpcId"]
+
+                # Get all of the route tables that are in that VPC
+                route_tables = ec2.describe_route_tables(
+                    Filters=[
+                        {
+                            'Name': 'vpc-id',
+                            'Values': [
+                                vpc_id
+                            ]
+                        }
+                    ]
+                )["RouteTables"]
+
+                # If the "AllowNatRouteUpdate" tag is present on the route table, then we update the routes
+                for route_table in route_tables:
+                    AllowNatRouteUpdates = [tag["Key"] for tag in route_table["Tags"] if tag["Key"]=="AllowNatRouteUpdates"]
+                    if AllowNatRouteUpdates:
+                      setPublicRoute(route_table["RouteTableId"], instance_id)
+                return
+
+
+            def setPublicRoute(route_table_id, instance_id):
+                ec2 = boto3.client('ec2')
+                try:
+                    ec2.delete_route(
+                    DestinationCidrBlock='0.0.0.0/0',
+                    RouteTableId=route_table_id
+                    )
+                except:
+                    print("route not found")
+                    
+                ec2.create_route(
+                    DestinationCidrBlock='0.0.0.0/0',
+                    RouteTableId=route_table_id,
+                    InstanceId=instance_id
+                )
+                
+                return
+      Runtime: python3.8
+      Timeout: 15
+  ConfigureNatInstancesPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt: [ConfigureNatInstances, Arn]
+      Principal: events.amazonaws.com
+
+  SetAsgCapacity:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaUtilityRole.Arn
+      Code: 
+        ZipFile: |
+            import boto3
+            import json
+
+            def lambda_handler(event, context):
+                size = event["size"]
+                client = boto3.client('autoscaling')
+                
+                groups = find_nat_autoscaling_group()
+                for group in groups:
+                    client.update_auto_scaling_group(
+                        AutoScalingGroupName=group,
+                        MinSize=size,
+                        MaxSize=size,
+                        DesiredCapacity=size
+                    )
+                
+                return {
+                    'statusCode': 200,
+                    'body': 'NAT group size updated to : ' + str(size)
+                }
+                
+
+            def find_nat_autoscaling_group():
+                client = boto3.client('autoscaling')
+                response = client.describe_auto_scaling_groups()
+                groups = [group["AutoScalingGroupName"] for group in response["AutoScalingGroups"] if 'lab-nat-asg-nat-instance-' in group["AutoScalingGroupName"]]
+                
+                return groups
+      Runtime: python3.8
+      Timeout: 10
+  SetAsgCapacityPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt: [SetAsgCapacity, Arn]
+      Principal: events.amazonaws.com
+
+
+#######################################################################
+# Outputs
+#######################################################################
+Outputs:
+  ConfigureNatInstancesArn:
+    Description: The ConfigureNatInstances ARN
+    Value: !GetAtt [ConfigureNatInstances, Arn]
+    Export:
+      Name: !Sub "${AWS::StackName}-ConfigureNatInstancesArn"
+  SetAsgCapacitysArn:
+    Description: The SetAsgCapacity ARN
+    Value: !GetAtt [SetAsgCapacity, Arn]
+    Export:
+      Name: !Sub "${AWS::StackName}-SetAsgCapacityArn"
