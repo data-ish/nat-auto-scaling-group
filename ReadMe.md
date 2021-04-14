@@ -1,7 +1,7 @@
 # Nat Instance Auto Scaling Group
 
 ## Introduction
-This code repository is in support of a [blog post](https://blog.data-ish.info/general/nat-auto-scaling-group) about NAT Gateways & Instances.  
+This code repository is in support of a [blog post](https://blog.data-ish.info/general/nat-auto-scaling-group.html) about NAT Gateways & Instances.  
 
 
 NAT gateways are expensive. NAT instances are not highly available. This repo contains a lab example demonstrating how to make a "more" available NAT Instance, without greatly increasing the cost. Specifically:  
